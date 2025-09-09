@@ -16,17 +16,20 @@ function humanizeCategory(folderName) {
   return folderName.replace(/([A-Z])/g, " $1").trim();
 }
 
+// Dynamic API route
 app.get("/api/arts", (req, res) => {
   try {
     const basePath = path.join(process.cwd(), "arts");
-    const categories = fs.readdirSync(basePath);
+    if (!fs.existsSync(basePath)) {
+      return res.json([]);
+    }
 
+    const categories = fs.readdirSync(basePath);
     let arts = [];
 
     categories.forEach((categoryFolder) => {
       const categoryPath = path.join(basePath, categoryFolder);
-
-      if (fs.statSync(categoryPath).isDirectory()) {
+      if (fs.existsSync(categoryPath) && fs.statSync(categoryPath).isDirectory()) {
         const files = fs.readdirSync(categoryPath);
 
         files.forEach((file) => {
@@ -35,17 +38,17 @@ app.get("/api/arts", (req, res) => {
             const name = path.basename(file, ext);
             let price = 0;
 
-            // agar naam me number ho toh usko price treat karenge
+            // filename me number ho toh usko price treat karenge
             const match = name.match(/(\d+)/);
             if (match) {
               price = parseInt(match[1]);
             }
 
             arts.push({
-              category: humanizeCategory(categoryFolder), // "Anime Arts"
+              category: humanizeCategory(categoryFolder),
               name: name,
               price: price,
-              file: `/arts/${categoryFolder}/${file}`, // safe URL
+              file: `/arts/${categoryFolder}/${file}`,
             });
           }
         });
@@ -53,10 +56,15 @@ app.get("/api/arts", (req, res) => {
     });
 
     res.json(arts);
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Failed to read arts" });
   }
+});
+
+// Optional: root route
+app.get("/", (req, res) => {
+  res.send("✅ Artify backend running! Visit /api/arts to see arts list.");
 });
 
 app.listen(PORT, () => {
