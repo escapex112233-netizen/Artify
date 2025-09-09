@@ -1,78 +1,63 @@
 import express from "express";
-import cors from "cors";
 import fs from "fs";
 import path from "path";
+import cors from "cors";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 
-// Folder jahan tumhare arts rakhe hain
-const ARTS_DIR = path.join(process.cwd(), "arts");
+// Serve static files from arts folder
+app.use("/arts", express.static(path.join(process.cwd(), "arts")));
 
-// Helper function: filename se art ka naam + price nikalna
-function parseArt(filename) {
-  const ext = path.extname(filename); // .png
-  const base = path.basename(filename, ext); // GokuAnime45
-
-  // last numbers = price
-  const match = base.match(/(\d+)$/);
-  const price = match ? parseInt(match[1]) : 0;
-  const name = match ? base.replace(match[1], "") : base;
-
-  return { name, price, filename };
+// Helper: convert folder name (like "AnimeArts") to "Anime Arts"
+function humanizeCategory(folderName) {
+  return folderName.replace(/([A-Z])/g, " $1").trim();
 }
 
-// API: sabhi arts
 app.get("/api/arts", (req, res) => {
-  let result = [];
+  try {
+    const basePath = path.join(process.cwd(), "arts");
+    const categories = fs.readdirSync(basePath);
 
-  const categories = fs.readdirSync(ARTS_DIR);
-  categories.forEach((category) => {
-    const categoryPath = path.join(ARTS_DIR, category);
-    if (fs.lstatSync(categoryPath).isDirectory()) {
-      const files = fs.readdirSync(categoryPath);
-      files.forEach((file) => {
-        const art = parseArt(file);
-        result.push({
-          category,
-          name: art.name,
-          price: art.price,
-          file: `/arts/${category}/${art.filename}`
+    let arts = [];
+
+    categories.forEach((categoryFolder) => {
+      const categoryPath = path.join(basePath, categoryFolder);
+
+      if (fs.statSync(categoryPath).isDirectory()) {
+        const files = fs.readdirSync(categoryPath);
+
+        files.forEach((file) => {
+          const ext = path.extname(file).toLowerCase();
+          if (ext === ".png" || ext === ".jpg" || ext === ".jpeg") {
+            const name = path.basename(file, ext);
+            let price = 0;
+
+            // agar naam me number ho toh usko price treat karenge
+            const match = name.match(/(\d+)/);
+            if (match) {
+              price = parseInt(match[1]);
+            }
+
+            arts.push({
+              category: humanizeCategory(categoryFolder), // "Anime Arts"
+              name: name,
+              price: price,
+              file: `/arts/${categoryFolder}/${file}`, // safe URL
+            });
+          }
         });
-      });
-    }
-  });
+      }
+    });
 
-  res.json(result);
-});
-
-// API: ek category ke arts
-app.get("/api/arts/:category", (req, res) => {
-  const category = req.params.category;
-  const categoryPath = path.join(ARTS_DIR, category);
-
-  if (!fs.existsSync(categoryPath)) {
-    return res.status(404).json({ error: "Category not found" });
+    res.json(arts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to read arts" });
   }
-
-  const files = fs.readdirSync(categoryPath);
-  const result = files.map((file) => {
-    const art = parseArt(file);
-    return {
-      category,
-      name: art.name,
-      price: art.price,
-      file: `/arts/${category}/${art.filename}`
-    };
-  });
-
-  res.json(result);
 });
-
-// Static files serve karna
-app.use("/arts", express.static(ARTS_DIR));
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
